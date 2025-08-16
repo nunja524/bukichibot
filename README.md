@@ -1,6 +1,3 @@
-# MiniPotato Bot
+# ブキチ杯bot
 
-
-note にて解説しているので、そちらをご参照ください！
-
-解説ページはこちら　[https://note.com/exteoi/n/n0ea64e258797](https://note.com/exteoi/n/n0ea64e258797)
+既存botから作ったのでなんかあるかも。
