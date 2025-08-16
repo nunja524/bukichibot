@@ -1,171 +1,69 @@
 import fs from "fs";
 import path from "path";
 import express from "express";
-import { Client, Collection, Events, GatewayIntentBits, ActivityType, EmbedBuilder } from "discord.js";
+import {
+  Client, Collection, Events, GatewayIntentBits, ActivityType
+} from "discord.js";
 import CommandsRegister from "./regist-commands.mjs";
-import Notification from "./models/notification.mjs";
 
-import Sequelize from "sequelize";
-import Parser from 'rss-parser';
-const parser = new Parser();
-
-import { Client as Youtubei, MusicClient } from "youtubei";
-
-const youtubei = new Youtubei();
-
-
-let postCount = 0;
+const PORT = process.env.PORT || 3000;
 const app = express();
-app.listen(3000);
-app.post('/', function(req, res) {
-  console.log(`Received POST request.`);
-  
-  postCount++;
-  if (postCount == 10) {
-    trigger();
-    postCount = 0;
-  }
-  
-  res.send('POST response by glitch');
-})
-app.get('/', function(req, res) {
-  res.send('<a href="https://note.com/exteoi/n/n0ea64e258797</a> に解説があります。');
-})
+
+// Health（RenderのHealth Check Pathは /health に）
+app.get("/health", (_req, res) => res.status(200).send("ok"));
+app.listen(PORT, () => console.log(`HTTP health server on :${PORT}`));
 
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.Guilds,            // スラッシュコマンド
+    GatewayIntentBits.GuildMessages,     // 通常メッセージ
+    GatewayIntentBits.MessageContent,    // メッセージ本文（Developer PortalでON）
+    GatewayIntentBits.GuildVoiceStates   // 使わないなら削ってOK
   ],
 });
 
 client.commands = new Collection();
 
+// ==== commands の動的読み込み（mjsのみ）====
 const categoryFoldersPath = path.join(process.cwd(), "commands");
-const commandFolders = fs.readdirSync(categoryFoldersPath);
-
-for (const folder of commandFolders) {
-  const commandsPath = path.join(categoryFoldersPath, folder);
-  const commandFiles = fs.readdirSync(commandsPath).filter((file) => file.endsWith(".mjs"));
-  
+if (fs.existsSync(categoryFoldersPath)) {
+  const commandFiles = fs.readdirSync(categoryFoldersPath).filter(f => f.endsWith(".mjs"));
   for (const file of commandFiles) {
-    const filePath = path.join(commandsPath, file);
-    import(filePath).then((module) => {
-      client.commands.set(module.data.name, module);
-    });
+    const filePath = path.join(categoryFoldersPath, file);
+    const module = await import(filePath);
+    if (module?.data?.name) client.commands.set(module.data.name, module);
   }
 }
 
+// ==== handlers の動的読み込み（mjsのみ）====
 const handlers = new Map();
-
 const handlersPath = path.join(process.cwd(), "handlers");
-const handlerFiles = fs.readdirSync(handlersPath).filter((file) => file.endsWith(".mjs"));
-
-for (const file of handlerFiles) {
-  const filePath = path.join(handlersPath, file);
-  import(filePath).then((module) => {
-    handlers.set(file.slice(0, -4), module);
-  });
+if (fs.existsSync(handlersPath)) {
+  const handlerFiles = fs.readdirSync(handlersPath).filter(f => f.endsWith(".mjs"));
+  for (const file of handlerFiles) {
+    const filePath = path.join(handlersPath, file);
+    const module = await import(filePath);
+    handlers.set(file.replace(/\.mjs$/, ""), module);
+  }
 }
 
-client.on("interactionCreate", async (interaction) => {
-  await handlers.get("interactionCreate").default(interaction);
+// イベント登録（存在チェック付き）
+client.on(Events.InteractionCreate, async (interaction) => {
+  const h = handlers.get("interactionCreate");
+  if (h?.default) await h.default(interaction, client);
 });
 
-client.on("voiceStateUpdate", async (oldState, newState) => {
-  await handlers.get("voiceStateUpdate").default(oldState, newState);
+client.on(Events.MessageCreate, async (message) => {
+  if (message.author.bot) return;
+  if (message.author.id === client.user?.id) return;
+  const h = handlers.get("messageCreate");
+  if (h?.default) await h.default(message, client);
 });
 
-client.on("messageCreate", async (message) => {
-  if (message.author.id == client.user.id || message.author.bot) return;
-  await handlers.get("messageCreate").default(message);
-});
-
-client.on("ready", async () => {
-  await client.user.setActivity('🔫', { type: ActivityType.Custom, state: "🔫疑似ブキチ杯🔫稼働中" });
+client.once(Events.ClientReady, async () => {
+  await client.user.setActivity("🔫疑似ブキチ杯🔫稼働中", { type: ActivityType.Custom });
   console.log(`${client.user.tag} がログインしました！`);
+  await CommandsRegister(); // スラコマ登録
 });
 
-Notification.sync({ alter: true });
-
-CommandsRegister();
-client.login(process.env.TOKEN);
-
-
-async function trigger() {
-  const youtubeNofications = await YoutubeNotifications.findAll({
-    attributes: [
-      [Sequelize.fn('DISTINCT', Sequelize.col('channelFeedUrl')) ,'channelFeedUrl'],
-    ]
-  });
-  await Promise.all(
-    youtubeNofications.map(async n => {
-      checkFeed(n.channelFeedUrl);
-    })
-  );
-}
-
-async function checkFeed(channelFeedUrl) {
-  
-  const youtubeFeed = await YoutubeFeeds.findOne({
-    where: {
-      channelFeedUrl: channelFeedUrl,
-    },
-  });
-  
-  const checkedDate = new Date(youtubeFeed.channelLatestUpdateDate);
-  let latestDate = new Date(youtubeFeed.channelLatestUpdateDate);
-  
-  const feed = await parser.parseURL(channelFeedUrl);
-  const videos = feed.items.map(i => {
-    const now = new Date(i.isoDate);
-    
-    if (now > checkedDate) {
-      if (now > latestDate) {
-        latestDate = now
-      }
-      return i;
-    }
-  });
-  
-  const notifications = await YoutubeNotifications.findAll({
-    where: {
-      channelFeedUrl: channelFeedUrl,
-    },
-  });
-  const youtubeChannelId = channelFeedUrl.split('=').at(1);
-  //const youtubeChannel = await youtubei.getChannel(youtubeChannelId);
-  
-  videos.forEach(async v => {
-    if (!v) return;
-    const youtubeVideolId = v.link.split('=').at(1);
-    const youtubeVideo = await youtubei.getVideo(youtubeVideolId);
-    
-    const embed = new EmbedBuilder()
-      .setColor(0xcd201f)
-      .setAuthor({ name: v.author, url: `https://www.youtube.com/channel/${youtubeChannelId}`})
-      .setTitle(v.title)
-	    .setURL(v.link)
-      .setDescription(youtubeVideo.description)
-	    .setImage(youtubeVideo.thumbnails.best)
-      .setTimestamp(new Date(v.isoDate));
-    
-    //.setThumbnail(youtubeChannel.thumbnails.best)
-
-    notifications.forEach( n => {
-      const channel = client.channels.cache.get(n.textChannelId);
-      channel.send({ embeds: [embed] });
-    });
-  });
-  
-  YoutubeFeeds.update(
-    { channelLatestUpdateDate: latestDate.toISOString() },
-    {
-      where: {
-        channelFeedUrl: channelFeedUrl,
-      },
-    },
-  );
-}
+client.login(process.env.DISCORD_TOKEN);
