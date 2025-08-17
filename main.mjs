@@ -6,7 +6,6 @@ import {
 import CommandsRegister from "./regist-commands.mjs";
 
 const PORT = process.env.PORT || 3000;
-const app = express();
 
 // Health（RenderのHealth Check Pathは /health に）
 app.get("/health", (_req, res) => res.status(200).send("ok"));
