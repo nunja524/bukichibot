@@ -1,51 +1,49 @@
+// main.mjs（Background Worker向け / HTTP不要）
 import fs from "fs";
 import path from "path";
-import {
-  Client, Collection, Events, GatewayIntentBits, ActivityType
-} from "discord.js";
+import { Client, Collection, Events, GatewayIntentBits, ActivityType } from "discord.js";
 import CommandsRegister from "./regist-commands.mjs";
 
-const PORT = process.env.PORT || 3000;
-
-// Health（RenderのHealth Check Pathは /health に）
-app.get("/health", (_req, res) => res.status(200).send("ok"));
-app.listen(PORT, () => console.log(`HTTP health server on :${PORT}`));
+const { DISCORD_TOKEN } = process.env;
+if (!DISCORD_TOKEN) {
+  console.error("❌ ENV DISCORD_TOKEN が未設定です。Render の Environment に設定してください。");
+  process.exit(1);
+}
 
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds,            // スラッシュコマンド
-    GatewayIntentBits.GuildMessages,     // 通常メッセージ
-    GatewayIntentBits.MessageContent,    // メッセージ本文（Developer PortalでON）
-    GatewayIntentBits.GuildVoiceStates   // 使わないなら削ってOK
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
   ],
 });
 
 client.commands = new Collection();
 
-// ==== commands の動的読み込み（mjsのみ）====
-const categoryFoldersPath = path.join(process.cwd(), "commands");
-if (fs.existsSync(categoryFoldersPath)) {
-  const commandFiles = fs.readdirSync(categoryFoldersPath).filter(f => f.endsWith(".mjs"));
-  for (const file of commandFiles) {
-    const filePath = path.join(categoryFoldersPath, file);
-    const module = await import(filePath);
-    if (module?.data?.name) client.commands.set(module.data.name, module);
+// ==== commands の動的読み込み（直下 *.mjs とサブフォルダ両対応なら regist-commands.mjs 側でOK）====
+const commandsDir = path.join(process.cwd(), "commands");
+if (fs.existsSync(commandsDir)) {
+  const files = fs.readdirSync(commandsDir).filter(f => f.endsWith(".mjs"));
+  for (const file of files) {
+    const filePath = path.join(commandsDir, file);
+    const mod = await import(filePath);
+    if (mod?.data?.name) client.commands.set(mod.data.name, mod);
   }
 }
 
-// ==== handlers の動的読み込み（mjsのみ）====
+// ==== handlers 読み込み ====
 const handlers = new Map();
-const handlersPath = path.join(process.cwd(), "handlers");
-if (fs.existsSync(handlersPath)) {
-  const handlerFiles = fs.readdirSync(handlersPath).filter(f => f.endsWith(".mjs"));
-  for (const file of handlerFiles) {
-    const filePath = path.join(handlersPath, file);
-    const module = await import(filePath);
-    handlers.set(file.replace(/\.mjs$/, ""), module);
+const handlersDir = path.join(process.cwd(), "handlers");
+if (fs.existsSync(handlersDir)) {
+  const files = fs.readdirSync(handlersDir).filter(f => f.endsWith(".mjs"));
+  for (const file of files) {
+    const filePath = path.join(handlersDir, file);
+    const mod = await import(filePath);
+    handlers.set(file.replace(/\.mjs$/, ""), mod);
   }
 }
 
-// イベント登録（存在チェック付き）
+// ==== イベント ====
 client.on(Events.InteractionCreate, async (interaction) => {
   const h = handlers.get("interactionCreate");
   if (h?.default) await h.default(interaction, client);
@@ -59,9 +57,12 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 client.once(Events.ClientReady, async () => {
-  await client.user.setActivity("🔫疑似ブキチ杯🔫稼働中", { type: ActivityType.Custom });
-  console.log(`${client.user.tag} がログインしました！`);
-  await CommandsRegister(); // スラコマ登録
+  try { await client.user.setActivity("🔫疑似ブキチ杯 稼働中", { type: ActivityType.Custom }); } catch {}
+  console.log(`✅ ${client.user.tag} がログインしました。`);
+  try { await CommandsRegister(); } catch (e) { console.error("❌ コマンド登録エラー:", e); }
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(DISCORD_TOKEN).catch((e) => {
+  console.error("❌ Discord ログイン失敗:", e);
+  process.exit(1);
+});

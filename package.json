@@ -2,6 +2,7 @@
   "name": "bukichi_bot",
   "version": "1.0.2",
   "description": "Splatoon3Tool",
+  "type": "module",
   "main": "main.mjs",
   "scripts": {
     "start": "node main.mjs"
@@ -9,7 +10,7 @@
  "dependencies": {
     "discord.js": "^14.15.3"
   },
- "engines": { "node": ">=18" },
+ "engines": { "node": "20.x" },
   "repository": {
     "url": "https://github.com/nunja524/bukichibot"
   },
