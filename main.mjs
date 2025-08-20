@@ -1,9 +1,21 @@
-// main.mjs（Background Worker向け / HTTP不要）
+// main.mjs（Web Service 版：Expressで /health を公開）
 import fs from "fs";
 import path from "path";
+import express from "express";
 import { Client, Collection, Events, GatewayIntentBits, ActivityType } from "discord.js";
 import CommandsRegister from "./regist-commands.mjs";
 
+// ---- Web サーバ（Render: Web Service 用）----
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// health エンドポイント（GAS から叩く先）
+app.get("/health", (_req, res) => res.status(200).send("ok"));
+// 任意：トップページ（動作確認用）
+app.get("/", (_req, res) => res.status(200).send("Discord bot is running."));
+app.listen(PORT, () => console.log(`HTTP server listening on :${PORT}`));
+
+// ---- Discord Bot ----
 const { DISCORD_TOKEN } = process.env;
 if (!DISCORD_TOKEN) {
   console.error("❌ ENV DISCORD_TOKEN が未設定です。Render の Environment に設定してください。");
@@ -12,15 +24,15 @@ if (!DISCORD_TOKEN) {
 
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.Guilds,          // スラッシュコマンド
+    GatewayIntentBits.GuildMessages,   // メッセージ反応
+    GatewayIntentBits.MessageContent,  // メッセージ本文（Developer PortalでON）
   ],
 });
 
 client.commands = new Collection();
 
-// ==== commands の動的読み込み（直下 *.mjs とサブフォルダ両対応なら regist-commands.mjs 側でOK）====
+// ==== commands（直下 *.mjs だけ読む簡易ローダー／サブフォルダは regist-commands 側で解決）====
 const commandsDir = path.join(process.cwd(), "commands");
 if (fs.existsSync(commandsDir)) {
   const files = fs.readdirSync(commandsDir).filter(f => f.endsWith(".mjs"));
@@ -31,7 +43,7 @@ if (fs.existsSync(commandsDir)) {
   }
 }
 
-// ==== handlers 読み込み ====
+// ==== handlers ====
 const handlers = new Map();
 const handlersDir = path.join(process.cwd(), "handlers");
 if (fs.existsSync(handlersDir)) {
@@ -61,6 +73,10 @@ client.once(Events.ClientReady, async () => {
   console.log(`✅ ${client.user.tag} がログインしました。`);
   try { await CommandsRegister(); } catch (e) { console.error("❌ コマンド登録エラー:", e); }
 });
+
+// エラー拾ってログに出す（任意：管理チャンネル通知にしてもOK）
+process.on("unhandledRejection", (err) => console.error("UnhandledRejection:", err));
+process.on("uncaughtException", (err) => console.error("UncaughtException:", err));
 
 client.login(DISCORD_TOKEN).catch((e) => {
   console.error("❌ Discord ログイン失敗:", e);
