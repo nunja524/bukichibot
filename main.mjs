@@ -8,9 +8,6 @@ import CommandsRegister from "./regist-commands.mjs";
 // ---- Web サーバ（Render: Web Service 用）----
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`HTTP server listening on :${PORT}`);
-});
 
 // health エンドポイント（GAS から叩く先）
 app.get("/health", (_req, res) => res.status(200).send("ok"));
