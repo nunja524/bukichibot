@@ -1,23 +1,18 @@
 {
   "name": "bukichi_bot",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "Splatoon3Tool",
   "type": "module",
   "main": "main.mjs",
   "scripts": {
     "start": "node main.mjs"
   },
- "dependencies": {
-    "discord.js": "^14.15.3"
+  "dependencies": {
+    "discord.js": "^14.15.3",
     "express": "^4.19.2"
   },
- "engines": { "node": "20.x" },
-  "repository": {
-    "url": "https://github.com/nunja524/bukichibot"
-  },
+  "engines": { "node": "20.x" },
+  "repository": { "url": "https://github.com/nunja524/bukichibot" },
   "license": "MIT",
-  "keywords": [
-    "node",
-    "render"
-  ]
+  "keywords": ["node", "render"]
 }
